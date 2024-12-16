@@ -1,4 +1,5 @@
 use std::{io::Read, thread::JoinHandle};
+use anyhow::Context;
 use symphonia::core::{
     audio::SampleBuffer, 
     codecs::DecoderOptions,
@@ -21,21 +22,29 @@ struct StreamingData {
     sample_rate: u32
 }
 
-fn download_thread(url: String, sender: flume::Sender<Vec<u8>>, buffer_size: usize) {
+fn download_thread(url: String, sender: flume::Sender<Vec<u8>>, buffer_size: usize) -> anyhow::Result<()> {
     let agent: ureq::Agent = ureq::Agent::config_builder().max_response_header_size(1_000_000).build().into();
-    let mut res = agent.get(url).call().unwrap();
+    
+    let mut res = agent.get(url).call()?;
+
     let res_body = res.body_mut();
+
     let mut reader = res_body.with_config().reader();
+    
     let mut buffer = vec![0u8; buffer_size];
+    
     while let Ok(n) = reader.read(&mut buffer) {
         if n == 0 {
             break;
         }
+
         sender.send(buffer[..n].to_vec()).unwrap();
     }
+
+    Ok(())
 }
 
-fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>) {
+fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>) -> anyhow::Result<()> {
     let target_sample_size = 512 * 256 - 1;
     let target_sample_rate = 16_000;
 
@@ -50,17 +59,16 @@ fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>)
     let decoder_opts: DecoderOptions = Default::default();
 
     // Probe the media source stream for a format.
-    let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts).unwrap();
+    let probed = symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts)?;
 
     // Get the format reader yielded by the probe operation.
     let mut format = probed.format;
 
     // Get the default track.
-    let track = format.default_track().unwrap();
+    let track = format.default_track().context("Could not find default track")?;
 
     // Create a decoder for the track.
-    let mut decoder =
-        symphonia::default::get_codecs().make(&track.codec_params, &decoder_opts).unwrap();
+    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &decoder_opts)?;
 
     // Store the track identifier, we'll use it to filter packets.
     let track_id = track.id;
@@ -156,12 +164,12 @@ fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>)
             Err(_) => break,
         }
     }
+
+    Ok(())
 }
 
 fn worker_thread(url_receiver: flume::Receiver<String>, chunk_sender: flume::Sender<AudioChunk>) {
     while let Ok(url) = url_receiver.recv() {
-        let url_clone = url.clone();
-
         let (stream_sender, stream_receiver) = flume::bounded(128);
         let stream_receiver = ReadableReceiver::new(stream_receiver, 8192);
         let download_thread = std::thread::spawn(move || download_thread(url, stream_sender, 8192));
@@ -169,11 +177,13 @@ fn worker_thread(url_receiver: flume::Receiver<String>, chunk_sender: flume::Sen
         let chunk_sender = chunk_sender.clone();
         let process_thread = std::thread::spawn(move || process_thread(stream_receiver, chunk_sender));
 
-        let _ = download_thread.join();
-        println!("Finished downloading {}", &url_clone);
+        if let Ok(Err(err)) = download_thread.join() {
+            println!("Error in download thread: {}", err);
+        }
 
-        let _ = process_thread.join();
-        println!("Finished processing {}", &url_clone);
+        if let Ok(Err(err)) = process_thread.join() {
+            println!("Error in process thread: {}", err);
+        }
     }
 }
 

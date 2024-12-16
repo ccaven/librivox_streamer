@@ -18,6 +18,11 @@ class PyAudioChunk:
         Returns the desired speed factor of the samples
         """
     
+    def step_factor(self) -> int:
+        """
+        Returns the desired pitch shift of the samples
+        """
+    
     def samples_bytes(self) -> bytes:
         """
         Returns an immutable reference to the source float32 data

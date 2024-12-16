@@ -6,6 +6,6 @@ fn main() {
     ]);
 
     while let Some(chunk) = download_pool.next() {
-        println!("Received chunk with {} samples.", chunk.samples.len());
+        println!("Received chunk with {} samples, step_factor = {}.", chunk.samples.len(), chunk.step_factor);
     }
 }

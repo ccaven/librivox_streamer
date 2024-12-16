@@ -1,12 +1,11 @@
-use rand::Rng;
+use rand::{seq::SliceRandom, thread_rng, Rng};
 
-pub struct SpeedFactorDistribution {
-    pub min: f32,
-    pub max: f32
+pub struct SpeedFactorDistribution<'a> {
+    inner: rand::distributions::Slice<'a, u32>
 }
 
-impl SpeedFactorDistribution {
-    pub fn next(&self) -> f32 {
-        rand::thread_rng().gen::<f32>() * (self.max - self.min) + self.min
-    }
+pub const STEPS: [i32; 9] = [-4, -3, -2, 1, 0, 1, 2, 3, 4];
+
+pub fn choose_random_step() -> i32 {
+    *STEPS.choose(&mut thread_rng()).unwrap()
 }

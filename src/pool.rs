@@ -6,12 +6,13 @@ use symphonia::core::{
     io::{MediaSourceStream, ReadOnlySource}, 
     meta::MetadataOptions, probe::Hint
 };
-use crate::{distributions::SpeedFactorDistribution, receiver::ReadableReceiver};
+use crate::{distributions::choose_random_step, receiver::ReadableReceiver};
 
 pub struct AudioChunk {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
-    pub speed_factor: f32
+    pub speed_factor: f32,
+    pub step_factor: i32
 }
 
 
@@ -37,7 +38,6 @@ fn download_thread(url: String, sender: flume::Sender<Vec<u8>>, buffer_size: usi
 fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>) {
     let target_sample_size = 512 * 256 - 1;
     let target_sample_rate = 16_000;
-    let speed_factor_distribution = SpeedFactorDistribution { min: 0.75, max: 1.25 };
 
     let reader = std::io::BufReader::new(receiver);
     let mss = MediaSourceStream::new(Box::new(ReadOnlySource::new(reader)), Default::default());
@@ -70,7 +70,8 @@ fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>)
 
     let target_seconds = (target_sample_size as f32) / (target_sample_rate as f32);
 
-    let mut current_speed_factor = speed_factor_distribution.next();
+    let mut current_step_factor = choose_random_step();
+    let mut current_speed_factor = 2f32.powf((current_step_factor as f32) / -12.0);
 
     let mut all_samples = vec![];
 
@@ -128,12 +129,14 @@ fn process_thread(receiver: ReadableReceiver, sender: flume::Sender<AudioChunk>)
                         
                         sender.send(AudioChunk {
                             samples: cut_samples.to_vec(),
-                            sample_rate: target_sample_rate,
+                            sample_rate: data.sample_rate,
                             speed_factor: current_speed_factor,
+                            step_factor: current_step_factor
                         }).unwrap();
 
                         // grab a new speed factor
-                        current_speed_factor = speed_factor_distribution.next();
+                        current_step_factor = choose_random_step();
+                        current_speed_factor = 2f32.powf((current_step_factor as f32) / -12.0);
 
                         // remove the first required_samples from the buffer
                         let remaining_samples = sample_count - required_samples;

@@ -23,6 +23,10 @@ impl PyAudioChunk {
         self.inner.speed_factor
     }
 
+    fn step_factor(&self) -> i32 {
+        self.inner.step_factor
+    }
+
     fn samples_bytes<'a>(&'a self) -> &'a [u8] {
         let samples = &self.inner.samples;
         bytemuck::cast_slice(samples)

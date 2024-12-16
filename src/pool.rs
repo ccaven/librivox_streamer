@@ -200,7 +200,7 @@ impl AudioTrackDownloadPool {
             url_sender.send(url).unwrap();
         }
 
-        let (chunk_sender, chunk_receiver) = flume::bounded(128);
+        let (chunk_sender, chunk_receiver) = flume::bounded(1024);
 
         let mut workers = vec![];
 

@@ -1,8 +1,4 @@
-use rand::{seq::SliceRandom, thread_rng, Rng};
-
-pub struct SpeedFactorDistribution<'a> {
-    inner: rand::distributions::Slice<'a, u32>
-}
+use rand::{seq::SliceRandom, thread_rng};
 
 pub const STEPS: [i32; 9] = [-4, -3, -2, 1, 0, 1, 2, 3, 4];
 
